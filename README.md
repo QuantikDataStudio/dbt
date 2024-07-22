@@ -20,6 +20,8 @@ indiquent que le `listing_id` 262394 a reçu 2 commentaires: un le 11 Avril 2012
 # Mise en place de l'environnement
 
 ## Configuration de Snowflake
+Pour configurer l'accès de DBT à Snowflake, copiez-coller cet ensemble de requêtes SQL dans Snowflake et exécutez-le. 
+N'hésitez pas à changer le mot de passe pour plus de sécurité.  
 ```sql
 -- Utiliser le rôle admin
 USE ROLE ACCOUNTADMIN;
@@ -155,3 +157,297 @@ INSERT INTO AIRBNB.RAW.REVIEWS (SELECT $1 as listing_id,
                                 from @jeu_de_donnees_airbnb/branches/main/dataset/reviews.csv
                                     (FILE_FORMAT => 'format_jeu_de_donnees'));
 ```
+
+
+# Changement du schéma curation
+
+```jinja
+{% macro generate_schema_name(custom_schema_name, node) -%}
+
+    {%- set default_schema = target.schema -%}
+    {%- if custom_schema_name is none -%}
+
+        {{ default_schema }}
+
+    {%- else -%}
+
+        {{ custom_schema_name | trim }}
+
+    {%- endif -%}
+
+{%- endmacro %}
+```
+
+# Définir les sources
+
+```yaml
+version: 2
+
+sources:
+  - name: raw_airbnb_data
+    database: airbnb  
+    schema: raw  
+    tables:
+      - name: hosts
+      - name: listings
+      - name: reviews
+
+```
+
+# Définir la seed
+Les données sur le nombre de visiteurs à Amsterdam par an sont tireées du site https://opendata.cbs.nl/#/CBS/en/dataset/82061ENG/table?searchKeywords=amsterdam 
+
+Ajouter ce code à votre fichier `dbt_project.yaml`: 
+```yaml
+seeds:
+  analyse_airbnb:
+    tourists_per_year:
+      +enabled: true
+      +database: airbnb
+      +schema: raw
+```
+
+Pour créer la table `airbnb.curation.tourists_per_year`, on utilise le SQL suivant:
+
+```sql
+with tourists_per_year as (
+    SELECT year, tourists
+   from ref("tourists_per_year")
+)
+SELECT
+    DATE(year || '-12-31') as year,
+    tourists 
+from tourists_per_year    
+```
+
+# Définir les snapshot
+
+Définir le snapshot pour la table `hosts`
+```jinja
+{% snapshot hosts_snapshot %}
+
+    {{
+        config(
+          target_database='airbnb',
+          target_schema='snapshots',
+          strategy='check',
+          check_cols='all',
+          unique_key='host_id'
+        )
+    }}
+
+    select * from {{ source('raw_airbnb_data', 'hosts') }}
+
+{% endsnapshot %}
+```
+
+Pour modifier une ligne dans la table `airbnb.raw.hosts`, on peut utiliser cette requête SQL: 
+```sql
+UPDATE airbnb.raw.hosts SELECT host_response_time='within an hour', host_response_rate='100%'
+where host_id='1376607';
+```
+
+# Tests de qualité de données et unitaires
+## Tests de qualité de donnée
+
+### Test de la qualité des données dans sources 
+```yaml
+version: 2
+
+sources:
+  - name: raw_airbnb_data
+    database: airbnb
+    schema: raw
+    tables:
+      - name: hosts
+        columns:
+          - name: host_id
+            tests:
+              - unique
+              - not_null
+
+      - name: listings
+      - name: reviews
+```
+
+### Test de la qualité des données des modèles
+```yaml
+version: 2
+
+models:
+  - name: curation_hosts
+    description: Table hotes nettoyée et formatée
+    columns:
+      - name: host_id
+        description: Identifiant unique de l'hôte
+        tests:
+          - unique
+          - not_null
+      - name: host_name
+        description: Nom de l'hôte
+        tests:
+          - not_null
+      - name: host_since
+        description: Date d'inscription de l'hôte
+        tests:
+          - not_null
+      - name: host_location
+        description: Ville et pays de l'hôte
+        tests:
+          - not_null
+      - name: host_city
+        description: Ville de l'hôte
+        tests:
+          - not_null
+      - name: host_country
+        description: Pays de l'hôte
+        tests:
+          - not_null
+      - name: is_superhost
+        description: Indicateur si l'hôte a le statut superhost 
+        tests:
+          - not_null
+          - accepted_values:
+              values: [TRUE, FALSE]
+      - name: host_neighbourhood
+        description: Quartier de l'hôte
+        tests:
+          - not_null
+      - name: is_identity_verified
+        description: Indicateur si l'identité de l'hôte a été vérifiée  
+        tests:
+          - not_null
+          - accepted_values:
+              values: [TRUE, FALSE]
+```
+
+## Tests unitaires pour SQL
+À ajouter au fichier `schema.yaml`
+```yaml
+unit_tests:
+  - name: test_is_host_data_transformation_correct
+    description: "Vérifie que host_name, host_city, host_country et response_rate sont créés correctement"
+    model: curation_hosts
+    given:
+      - input: ref('hosts_snapshot')
+        rows:
+          - {host_name: 'Jacko', host_location: "ville,pays", host_response_rate: '32%'}
+          - {host_name: 'Xi', host_location: "ville,pays", host_response_rate: '32%'}
+          - {host_name: 'J', host_location: "pays,ville", host_response_rate: '32.53%'}
+    expect:
+      rows:
+        - {host_name: 'Jacko', host_city: 'ville', host_country: 'pays', response_rate:32}
+        - {host_name: 'Xi', host_city: 'ville', host_country: 'pays', response_rate:32}
+        - {host_name: 'Anonyme', host_city: 'pays', host_country: 'ville', response_rate: 32}
+
+```
+
+```yaml
+unit_tests:
+  - name: test_is_host_data_transformation_correct
+    description: "Vérifie que host_name, host_city, host_country et response_rate sont créés correctement"
+    model: curation_hosts
+    given:
+      - input: ref('hosts_snapshot')
+        rows:
+          - {host_name: 'Jacko', host_location: "ville,pays", host_response_rate: '32%', DBT_VALID_TO: null, host_is_superhost: 't', host_neighbourhood: 'quartier'} 
+          - {host_name: 'Xi', host_location: "ville,pays", host_response_rate: '32.03%', DBT_VALID_TO: null, host_is_superhost: 't', host_neighbourhood: 'quartier'}
+          - {host_name: 'J', host_location: "pays,ville", host_response_rate: '32.53%', DBT_VALID_TO: null, host_is_superhost: 't', host_neighbourhood: 'quartier'}
+    expect:
+      rows:
+        - {host_name: 'Jacko', host_city: 'ville', host_country: 'pays', response_rate: 32}
+        - {host_name: 'Xi', host_city: 'ville', host_country: 'pays', response_rate: 32}
+        - {host_name: 'Anonyme', host_city: 'pays', host_country: 'ville', response_rate: 33}
+```
+
+## Tests unitaires pour macros
+```yaml
+{% macro extraire_prix_a_partir_dun_caractere(price, symbol) -%}
+    try_cast(
+        CASE 
+            WHEN STARTSWITH({{ price }}, '{{ symbol }}') THEN SPLIT_PART({{ price }}, '{{ symbol }}', 2)
+            WHEN ENDSWITH({{ price }}, '{{ symbol }}') THEN SPLIT_PART({{ price }}, '{{ symbol }}', 1)
+            ELSE NULL
+        END
+    AS FLOAT)
+{% endmacro %}
+```
+
+## Installation de DBT utils
+Créer le fichier `packages.yaml` avec le contenu suivant
+
+```yaml
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.2.0
+ ```
+
+```yaml
+- name: minimum_nights
+  tests:
+    - dbt_utils.accepted_range:
+        min_value: 1
+- name: price
+  tests:
+     - dbt_utils.accepted_range:
+        min_value: 0
+        inclusive: false
+```
+
+# Materialisation incrementale
+
+## Modification de la table hosts
+```sql
+ALTER TABLE AIRBNB.RAW.HOSTS ADD COLUMN LOAD_TIMESTAMP TIMESTAMP;
+UPDATE AIRBNB.RAW.HOSTS SET LOAD_TIMESTAMP = CURRENT_TIMESTAMP;
+SELECT * from AIRBNB.raw.hosts limit 10;
+```
+
+## Creation du model hosts_inc
+```jinja
+{{
+    config(
+        database=var('inc_database'),
+        schema=var('inc_schema'),
+        materialized='incremental',
+        unique_key='host_id'
+    )
+}}
+with raw_hosts as (
+    SELECT * from {{ source("raw_airbnb_data", "hosts") }}
+)
+select *
+from raw_hosts
+{% if is_incremental() %}
+where load_timestamp > (select max(load_timestamp) from {{this}} )
+{% endif %}
+```
+
+N'oubliez pas de définir les valeurs des variables au niveau du projet, dans le fichier dbt_project.yml :)
+
+## Insérer une nouvelle ligne dans raw.hosts
+```sql
+SELECT * from airbnb.raw.hosts where host_id='1376607';
+
+insert into airbnb.raw.hosts VALUES (
+'1376607','Martin S','2011-11-06'::DATE,'Amsterdam, Netherlands','within an hour','100%','t','Hoofddorppleinbuurt','t',current_timestamp
+)
+```
+
+## rajouter ce SQL pour éviter les duplicate 
+```sql
+{% else %}
+join (select host_id, max(load_timestamp) as load_timestamp from {{ source("raw_airbnb_data", "hosts") }} group by 1) t2
+on raw_hosts.host_id = t2.host_id and raw_hosts.load_timestamp = t2.load_timestamp
+```
+
+
+# Projet final
+- Distribution des prix par quartier
+- Distribution des super hotes par quartier
+- Relation prix <> super hote
+
+- hypothese:
+-   - 1 airbnb => 1 review 
+-   - 1 airbnb => 0.8 review
+- est-ce qu'il y a plus/moins de visiteurs à Amsterdam qui préferent des nuits dans un airbnb par rapport à l'hôtel

@@ -181,6 +181,57 @@ INSERT INTO AIRBNB.RAW.REVIEWS (SELECT $1 as listing_id,
 {%- endmacro %}
 ```
 
+# Création des 1ers modèles
+
+Le SQL pour `curation_hosts` est le suivant:
+
+```snowflake
+WITH hosts_raw AS (
+    SELECT
+		host_id,
+		CASE WHEN len(host_name) = 1 THEN 'Anonyme' ELSE host_name END AS host_name,
+		host_since,
+		host_location,
+		SPLIT_PART(host_location, ',', 1) AS host_city,
+		SPLIT_PART(host_location, ',', 2) AS host_country,
+		TRY_CAST(REPLACE(host_response_rate, '%', '') AS INTEGER) AS response_rate,
+		host_is_superhost = 't' AS is_superhost,
+		host_neighbourhood,
+		host_identity_verified = 't' AS is_identity_verified
+    FROM airbnb.raw.hosts)
+SELECT *
+from hosts_raw;
+```
+
+Le SQL pour `curation_listings` est le suivant:
+```snowflake
+WITH listings_raw AS 
+	(SELECT 
+		id AS listing_id,
+		listing_url,
+		name,
+		description,
+		description IS NOT NULL has_description,
+		neighbourhood_overview,
+		neighbourhood_overview IS NOT NULL AS has_neighrbourhood_description,
+		host_id,
+		latitude,
+		longitude,
+		property_type,
+		room_type,
+		accommodates,
+		bathrooms,
+		bedrooms,
+		beds,
+		amenities,
+        try_cast(split_part(price, '$', 1) as float) as price
+		minimum_nights,
+		maximum_nights
+	FROM airbnb.raw.listings )
+SELECT *
+FROM listings_raw
+```
+
 # Définir les sources
 
 ```yaml

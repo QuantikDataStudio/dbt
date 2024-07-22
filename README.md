@@ -59,6 +59,9 @@ GRANT ALL ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE transform;
 ```
 
 ## Chargement des donneées
+Pour charger les données dans Snowflake, il nous faut faire un peu de gymnastique SQL. Nous vous proposons de copier-coller
+cet ensemble de requêtes et de les exécuter dans Snowflake. Vous devriez trouver l'explication de chaque ligne dans le cours.
+
 ```sql
 USE WAREHOUSE COMPUTE_WH;
     

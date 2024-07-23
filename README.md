@@ -17,7 +17,7 @@ le `listing_id` et la `date` du commentaire qui a été laissé. Par exemple, ce
 ```
 indiquent que le `listing_id` 262394 a reçu 2 commentaires: un le 11 Avril 2012 et l'autre le 25 Avril 2012.
 
-# Mise en place de l'environnement
+# Chapitre 1: Mise en place de l'environnement
 
 ## Configuration de Snowflake
 Pour configurer l'accès de DBT à Snowflake, copiez-coller cet ensemble de requêtes SQL dans Snowflake et exécutez-le. 
@@ -161,27 +161,8 @@ INSERT INTO AIRBNB.RAW.REVIEWS (SELECT $1 as listing_id,
                                     (FILE_FORMAT => 'format_jeu_de_donnees'));
 ```
 
-
-# Changement du schéma curation
-
-```jinja
-{% macro generate_schema_name(custom_schema_name, node) -%}
-
-    {%- set default_schema = target.schema -%}
-    {%- if custom_schema_name is none -%}
-
-        {{ default_schema }}
-
-    {%- else -%}
-
-        {{ custom_schema_name | trim }}
-
-    {%- endif -%}
-
-{%- endmacro %}
-```
-
-# Création des 1ers modèles
+# Chapitre 3: Créer notre 1er modèle
+## Création des 1ers modèles
 
 Le SQL pour `curation_hosts` est le suivant:
 
@@ -232,7 +213,42 @@ SELECT *
 FROM listings_raw
 ```
 
-# Définir les sources
+# Chapitre 4: Les matérialisations 
+
+## Ajouter la macro config
+Pour configurer la matérialisation d'un modèle speécifique, on peut utiliser la macro suivante:
+
+```jinja
+{{
+   config(
+      materialized='view'
+   )
+}}
+```
+
+## Changement du schéma curation
+La macro pour changer le schéma de destination des tables est la suivante
+
+```jinja
+{% macro generate_schema_name(custom_schema_name, node) -%}
+
+    {%- set default_schema = target.schema -%}
+    {%- if custom_schema_name is none -%}
+
+        {{ default_schema }}
+
+    {%- else -%}
+
+        {{ custom_schema_name | trim }}
+
+    {%- endif -%}
+
+{%- endmacro %}
+```
+
+# Chapitre 5: Linéage
+
+## Définir les sources
 
 ```yaml
 version: 2
@@ -248,7 +264,7 @@ sources:
 
 ```
 
-# Définir la seed
+## Définir la seed
 Les données sur le nombre de visiteurs à Amsterdam par an sont tireées du site https://opendata.cbs.nl/#/CBS/en/dataset/82061ENG/table?searchKeywords=amsterdam 
 
 Ajouter ce code à votre fichier `dbt_project.yaml`: 
@@ -274,7 +290,7 @@ SELECT
 from tourists_per_year    
 ```
 
-# Définir les snapshot
+## Définir les snapshot
 
 Définir le snapshot pour la table `hosts`
 ```jinja
@@ -300,11 +316,14 @@ Pour modifier une ligne dans la table `airbnb.raw.hosts`, on peut utiliser cette
 UPDATE airbnb.raw.hosts SELECT host_response_time='within an hour', host_response_rate='100%'
 where host_id='1376607';
 ```
+N'hésitez pas à tester plus de modifications avec d'autres valeurs pour `host_id` par exemple.
 
-# Tests de qualité de données et unitaires
-## Tests de qualité de donnée
 
-### Test de la qualité des données dans sources 
+# Chapitre 6: Tests de qualité de données et unitaires
+
+## Test de la qualité des données dans sources
+Pour insérer des tests sur la qualité des données de nos sources, il suffit de copier-coller ce code dans le fichiers 
+`sources.yaml`
 ```yaml
 version: 2
 
@@ -319,12 +338,13 @@ sources:
             tests:
               - unique
               - not_null
-
       - name: listings
       - name: reviews
 ```
 
-### Test de la qualité des données des modèles
+## Test de la qualité des données des modèles
+Pour insérer des tests sur la qualité des données de nos modèles, il suffit de copier-coller ce code dans le fichiers 
+`schema.yaml`
 ```yaml
 version: 2
 
@@ -376,7 +396,7 @@ models:
 ```
 
 ## Tests unitaires pour SQL
-À ajouter au fichier `schema.yaml`
+Pour tester la logique dans le modèle `curation_hosts`, ajoutez au fichier `schema.yaml` 
 ```yaml
 unit_tests:
   - name: test_is_host_data_transformation_correct
@@ -395,7 +415,8 @@ unit_tests:
         - {host_name: 'Anonyme', host_city: 'pays', host_country: 'ville', response_rate: 32}
 
 ```
-
+Ce code mène à une erreur dûe aux différents filtres (i.e. `where`) que l'on définit dans notre modèle. Il faut donc faire en sorte que 
+ces filtres soient pris en compte dans notre test. Une meilleure définition des données mock est donc:
 ```yaml
 unit_tests:
   - name: test_is_host_data_transformation_correct
@@ -415,6 +436,7 @@ unit_tests:
 ```
 
 ## Tests unitaires pour macros
+Pour transformer le prix d'un `varchar` vers un `float`, on peut utiliser la macro suivante: 
 ```yaml
 {% macro extraire_prix_a_partir_dun_caractere(price, symbol) -%}
     try_cast(
@@ -436,11 +458,17 @@ packages:
     version: 1.2.0
  ```
 
+Mettre à jour le fichier `sources.yaml` avec le code suivant, sous la table `listings`
+
 ```yaml
 - name: minimum_nights
   tests:
     - dbt_utils.accepted_range:
         min_value: 1
+```
+
+Et dans le fichier `schema.yaml`, sous la table `listings`, ajouter ce test
+```yaml
 - name: price
   tests:
      - dbt_utils.accepted_range:

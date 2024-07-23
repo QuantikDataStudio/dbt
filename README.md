@@ -523,13 +523,3 @@ join (select host_id, max(load_timestamp) as load_timestamp from {{ source("raw_
 on raw_hosts.host_id = t2.host_id and raw_hosts.load_timestamp = t2.load_timestamp
 ```
 
-
-# Projet final
-- Distribution des prix par quartier
-- Distribution des super hotes par quartier
-- Relation prix <> super hote
-
-- hypothese:
--   - 1 airbnb => 1 review 
--   - 1 airbnb => 0.8 review
-- est-ce qu'il y a plus/moins de visiteurs à Amsterdam qui préferent des nuits dans un airbnb par rapport à l'hôtel

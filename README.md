@@ -476,7 +476,7 @@ Et dans le fichier `schema.yaml`, sous la table `listings`, ajouter ce test
         inclusive: false
 ```
 
-# Materialisation incrementale
+# Chapitre 6: Materialisation incrementale
 
 ## Modification de la table hosts
 ```sql

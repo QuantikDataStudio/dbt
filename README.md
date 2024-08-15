@@ -205,7 +205,7 @@ WITH listings_raw AS
 		bedrooms,
 		beds,
 		amenities,
-        try_cast(split_part(price, '$', 1) as float) as price
+        try_cast(split_part(price, '$', 1) as float) as price,
 		minimum_nights,
 		maximum_nights
 	FROM airbnb.raw.listings )

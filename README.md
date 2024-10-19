@@ -209,7 +209,7 @@ WITH listings_raw AS
 		bedrooms,
 		beds,
 		amenities,
-        try_cast(split_part(price, '$', 1) as float) as price
+        try_cast(split_part(price, '$', 1) as float) as price,
 		minimum_nights,
 		maximum_nights
 	FROM airbnb.raw.listings )
@@ -286,7 +286,7 @@ Pour créer la table `airbnb.curation.tourists_per_year`, on utilise le SQL suiv
 ```sql
 with tourists_per_year as (
     SELECT year, tourists
-   from ref("tourists_per_year")
+   from {{ ref ("tourists_per_year") }}
 )
 SELECT
     DATE(year || '-12-31') as year,
@@ -317,7 +317,7 @@ Définir le snapshot pour la table `hosts`
 
 Pour modifier une ligne dans la table `airbnb.raw.hosts`, on peut utiliser cette requête SQL: 
 ```sql
-UPDATE airbnb.raw.hosts SELECT host_response_time='within an hour', host_response_rate='100%'
+UPDATE airbnb.raw.hosts SET host_response_time='within an hour', host_response_rate='100%'
 where host_id='1376607';
 ```
 N'hésitez pas à tester plus de modifications avec d'autres valeurs pour `host_id` par exemple.

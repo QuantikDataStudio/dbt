@@ -1,3 +1,7 @@
+![Ada, la seule formation qui vous forme à la stack data](images/ada.jpeg "Cours DBT Ada")
+
+Pour rejoindre notre formation, direction notre plateforme [Ada](https://www.ada-study.com)
+
 # Le jeu de données Airbnb
 ## Source: 
 Le jeu de données a été téléchargé depuis le site https://insideairbnb.com/get-the-data/ qui regroupe les données Airbnb 

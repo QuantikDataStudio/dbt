@@ -68,6 +68,8 @@ cet ensemble de requêtes et de les exécuter dans Snowflake. Vous devriez trouv
 
 ```sql
 USE WAREHOUSE COMPUTE_WH;
+USE DATABASE AIRBNB;
+USE SCHEMA RAW;    
     
 create or replace api integration integration_jeu_de_donnees_github
 api_provider = git_https_api
